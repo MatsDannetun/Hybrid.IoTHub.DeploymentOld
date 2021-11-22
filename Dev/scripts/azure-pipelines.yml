@@ -1,0 +1,245 @@
+# Starter pipeline
+# Start with a minimal pipeline that you can customize to build and deploy your code.
+# Add steps that build, run tests, deploy, and more:
+# https://aka.ms/yaml
+
+# trigger:
+#   branches:
+#     include: 
+#       - dev/int/35025_IaC-pipeline-with-helm
+
+# Disable automatic pipeline runs for now. 
+trigger: none
+
+schedules:
+  - cron: "00 00 * * *"
+    displayName: Daily midnight build 
+    branches:
+      include:
+      - master
+    always: true
+  
+parameters:
+  - name: TestFilter
+    displayName: Filter which test to execute
+    type: object
+    default: Category=all
+  - name: ResourceGroupName
+    displayName: Resource Group
+    type: string
+    default: <enter name>
+  - name: DeleteResourceGroup
+    displayName: Delete Resource Group
+    type: boolean 
+    default: false
+  - name: Location 
+    type: string
+    default: westeurope
+    values:
+      - westeurope
+      - northeurope
+
+variables:
+  iactestBranchName: 'Hybridpipeline'
+  deployAks: $[eq(variables['AksDeployment'], 'yes')]
+  deployIot: $[eq(variables['IotDeployment'], 'yes')]
+  AksName: 'iactest-aks'
+  DeploymentName: 'opclive-data'
+  K8sNamespace:  'sfh1'
+  K8sIdAppLabel: 'MyCoidentity'
+  EquipmentNumber: 'Z9988Z0001'
+  DeviceId: 'sfh1'
+  IothubGwUrn: 'urn:MyCo:identity'
+  IothubGwContainerName: 'iothubgateway'
+  ShareName: 'iactestshare'
+  DotNetVersion: '6.0.x'
+  Location: ${{ parameters.Location }}
+  ${{ if eq( variables['Build.Reason'], 'Schedule' ) }}: 
+    ResourceGroupName: e2etest-nightly
+  ${{ if ne( variables['Build.Reason'], 'Schedule' ) }}: 
+    ResourceGroupName: ${{ parameters.ResourceGroupName }}
+  ${{ if eq( variables['Build.Reason'], 'Schedule' ) }}: 
+    DeleteResourceGroup: true
+  ${{ if ne( variables['Build.Reason'], 'Schedule' ) }}: 
+    DeleteResourceGroup: ${{ parameters.DeleteResourceGroup }}
+  
+stages:
+- stage: 'Infra'
+  condition: or(eq(variables.deployAks, 'true'), eq(variables.deployIot, 'true'))
+  displayName: 'Create Azure test infrastructure'
+  jobs: 
+  - job: 'Infra'
+    displayName: 'Build Azure resources'
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: AzureCLI@2
+      displayName: 'Upgrade Bicep'
+      inputs:
+        azureSubscription: $(ServiceConnectionName)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: 'az bicep upgrade'  
+
+    - task: AzureCLI@2
+      displayName: 'Build resources using Bicep'
+      inputs:
+        azureSubscription: $(ServiceConnectionName)
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          az deployment sub create \
+            --name $(Build.BuildNumber) \
+            --location $(Location) \
+            --template-file e2e-tests/pipeline/main.bicep \
+            --parameters resourceGroupName=$(ResourceGroupName) \
+                         environmentType=$(EnvironmentType) \
+                         aksDeployment=$(AksDeployment) \
+                         iotDeployment=$(IotDeployment) \
+                         aksClientId=$(AksClientId) \
+                         aksClientSecret=$(AksClientSecret) \
+                         fileShareType=$(FileShareType) \
+                         dpsDeployment=$(DpsDeployment) || exit 1
+
+          deploymentoutputs=$(az deployment sub show \
+                                --name $(Build.BuildNumber) \
+                                --query properties.outputs)
+
+          echo 'Publish output variables as artifacts'
+          mkdir -p $(Pipeline.Workspace)/variables
+          echo $deploymentoutputs | jq -c '. | to_entries[] | [.key, .value.value]' |
+            while IFS=$"\n" read -r c; do
+              outputname=$(echo "$c" | jq -r '.[0]')
+              outputvalue=$(echo "$c" | jq -r '.[1]')
+              echo "setting variable $outputname=$outputvalue"
+              echo "##vso[task.setvariable variable=$outputname]$outputvalue"
+              echo $outputvalue > $(Pipeline.Workspace)/variables/$outputname
+            done
+
+    - task: PublishPipelineArtifact@1
+      displayName: 'Publish Bicep output as an artifact'
+      inputs:
+        targetPath: $(Pipeline.Workspace)/variables
+        artifactType: 'pipeline'
+        artifactName: variables
+
+- stage: 'ContainerDeployment'
+  displayName: 'Create OPC containers in AKS'
+  dependsOn: 'Infra'
+  #condition: or(succeeded(), eq(dependencies.Infra.result, 'Skipped'))
+  jobs: 
+  - job: 'OPC'
+    displayName: 'Deploy OPC Live Data'
+    pool:
+      vmImage: ubuntu-latest
+    steps:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Bicep outputs'
+      inputs:
+        artifact: variables
+        path: '$(Pipeline.Workspace)/variables'
+    - bash: |
+        aksStorageAccountName=$(cat $(Pipeline.Workspace)/variables/aksStorageAccountName)
+        #$storageAccountName = Get-Content $(Pipeline.Workspace)/variables/storageAccountName
+        echo "##vso[task.setvariable variable=StorageAccountName]$aksStorageAccountName"
+
+        iotHubName=$(cat $(Pipeline.Workspace)/variables/iotHubName)
+        #$iotHubName = Get-Content $(Pipeline.Workspace)/variables/iotHubName
+        echo "##vso[task.setvariable variable=IotHubName]$iotHubName"
+    - task: AzureCLI@2
+      displayName: 'Deploy OPC Live Data Helm chart'
+      inputs:
+        azureSubscription: $(ServiceConnectionName)
+        scriptType: 'bash'
+        scriptLocation: 'scriptPath'
+        scriptPath: './e2e-tests/pipeline/helm/opc-deploy-cert-auth.sh'
+        arguments: >
+          $(ResourceGroupName)
+          $(StorageAccountName)
+          $(IotHubname)
+          $(DeploymentName)
+          $(K8sNamespace)
+          $(K8sIdAppLabel)
+          $(EquipmentNumber)
+          $(AksName)
+          $(DeviceId)
+          $(IothubGwUrn)
+          $(IothubGwContainerName)
+
+- stage: 'End2EndTest'
+  displayName: 'Build and run OPC end-to-end test'
+  dependsOn: 'ContainerDeployment'
+  jobs: 
+  - job: 'OPCE2E'
+    displayName: 'Build and run OPC end-to-end test'
+    pool:
+      vmImage: windows-latest
+    steps:
+    - task: DownloadPipelineArtifact@2
+      displayName: 'Download Bicep outputs'
+      inputs:
+        artifact: variables
+        path: '$(Pipeline.Workspace)/variables'
+    - task: AzurePowerShell@5
+      displayName: 'Prepare Testrun'
+      inputs:
+        azureSubscription: $(ServiceConnectionName)
+        azurePowerShellVersion: 'latestVersion'
+        scriptType: 'inlineScript'
+        inline: |
+          # Read variables from pipeline
+          $iotHubName = Get-Content $(Pipeline.Workspace)/variables/iotHubName
+          $aksStorageAccountName = Get-Content $(Pipeline.Workspace)/variables/aksStorageAccountName
+          $iotStorageAccountName = Get-Content $(Pipeline.Workspace)/variables/iotStorageAccountName
+          # Get secrets
+          $e2eenv = & e2e-tests/pipeline/scripts/get-e2etestenv.ps1 -ResourceGroupName "$(ResourceGroupName)" -IotHubName $iotHubName -IotStorageName $iotStorageAccountName -AksStorageName $aksStorageAccountName
+          # Generate runsettings
+          $runsettingsFileContents = & e2e-tests/pipeline/scripts/get-runsettings.ps1 -E2ETestEnv $e2eenv
+          Write-Output "======= Begin Runsettings ======= "
+          Write-Output $runsettingsFileContents
+          Write-Output "======= End Runsettings ======= "
+          Set-Content -Path $(Build.ArtifactStagingDirectory)/e2e-pipeline.runsettings -Value $runsettingsFileContents
+          # Setup AKS
+          Import-AzAksCredential -ResourceGroupName "$(ResourceGroupName)" -Name "$(AksName)" -Force
+          # Print debug information
+          Write-Output "C:\Users\vssadministrator\.kube\config:"
+          Get-Content C:\Users\vssadministrator\.kube\config
+    - task: PublishPipelineArtifact@1
+      inputs:
+        targetPath: $(Build.ArtifactStagingDirectory)/e2e-pipeline.runsettings
+        artifactType: 'pipeline'
+        artifactName: 'e2e-pipeline.runsettings'
+    - task: UseDotNet@2
+      displayName: 'Upgrade dotnet'
+      inputs:
+        version: $(DotNetVersion)
+        includePreviewVersions: true
+    - task: DotNetCoreCLI@2
+      displayName: 'Build OPC test project'
+      inputs:
+        command: 'test'
+        projects: '$(TestProject)'
+        ${{ if eq(length(parameters.TestFilter), 0) }}:
+          arguments: '-s $(Build.ArtifactStagingDirectory)/e2e-pipeline.runsettings'
+        ${{ else }}:
+          arguments: '-s $(Build.ArtifactStagingDirectory)/e2e-pipeline.runsettings --filter=${{ parameters.TestFilter }}'    
+    - powershell: |
+        Remove-Item "$(Build.ArtifactStagingDirectory)/e2e-pipeline.runsettings"
+- stage: cleanup
+  condition: and(succeeded(), eq(variables.DeleteResourceGroup, 'true'))
+  displayName: "Delete Resources"
+  jobs:
+    - job: cleanup
+      pool:
+        vmImage: windows-latest
+      steps:
+      - task: AzurePowerShell@5
+        displayName: "Delete Resource Group"
+        inputs:
+          azureSubscription: $(ServiceConnectionName)
+          azurePowerShellVersion: 'latestVersion'
+          scriptType: 'InlineScript'
+          inline: |
+            Write-Host "Deleting Resource group '$(ResourceGroupName)'..."
+            Get-AzResourceGroup -Name "$(ResourceGroupName)" | Remove-AzResourceGroup -Force
+
