@@ -11,13 +11,13 @@
 # Disable automatic pipeline runs for now. 
 trigger: none
 
-schedules:
-  - cron: "00 00 * * *"
-    displayName: Daily midnight build 
-    branches:
-      include:
-      - master
-    always: true
+#schedules:
+#  - cron: "00 00 * * *"
+#    displayName: Daily midnight build 
+#    branches:
+#      include:
+#      - master
+#    always: true
   
 parameters:
   - name: TestFilter
