@@ -6,11 +6,11 @@ param location string
 @description('The name of the Managed Cluster resource.')
 param clusterName string
 
-@description('AKS service principal used by AKS.  Must have pull rights on <own> dev ACR registry.')
-param aksClientId string
+//@description('AKS service principal used by AKS.  Must have pull rights on <own> dev ACR registry.')
+//param aksClientId string
 
-@description('Service principal secret/password')
-param aksClientSecret string
+//@description('Service principal secret/password')
+//param aksClientSecret string
 
 @description('Optional DNS prefix to use with hosted Kubernetes API server FQDN.')
 param dnsPrefix string
@@ -96,9 +96,9 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-05-01' = {
         name: 'agentpool'
       }
     ]
-    servicePrincipalProfile:{
-      clientId: aksClientId
-      secret: aksClientSecret
+    //servicePrincipalProfile:{
+      //clientId: aksClientId
+      //secret: aksClientSecret
     }
     linuxProfile: {
       adminUsername: linuxAdminUsername

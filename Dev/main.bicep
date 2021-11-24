@@ -31,8 +31,8 @@ param iotDeployment string
 
 // Default parameter values for AKS infrastructure
 param clusterName string = 'iactest-aks'
-param aksClientId string
-param aksClientSecret string
+//param aksClientId string
+//param aksClientSecret string
 param dnsPrefix string = 'iactest'
 param osDiskSizeGB int = 0
 param agentCount int = 1
@@ -83,8 +83,8 @@ module aksinfra './modules/aks-infra.bicep' = if (deployAks) {
     location: location
     environmentType: environmentType
     clusterName: clusterName
-    aksClientId: aksClientId
-    aksClientSecret: aksClientSecret
+    //aksClientId: aksClientId
+    //aksClientSecret: aksClientSecret
     dnsPrefix: dnsPrefix
     osDiskSizeGB: osDiskSizeGB
     agentCount: agentCount
