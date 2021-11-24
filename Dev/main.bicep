@@ -83,8 +83,6 @@ module aksinfra './modules/aks-infra.bicep' = if (deployAks) {
     location: location
     environmentType: environmentType
     clusterName: clusterName
-    //aksClientId: aksClientId
-    //aksClientSecret: aksClientSecret
     dnsPrefix: dnsPrefix
     osDiskSizeGB: osDiskSizeGB
     agentCount: agentCount
