@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: azure-file-share
+  namespace: {{ .Values.namespace }}
+type: Opaque
+data:
+  azurestorageaccountname: {{ .Values.storageAccount.name | b64enc }}
+  azurestorageaccountkey: {{ .Values.storageAccount.key | b64enc }}

@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mosquittoconfig
+  namespace: {{ .Values.namespace }}
+data:
+  mosquitto.conf: {{- toYaml .Values.mqttbroker.config | nindent 2 }}
