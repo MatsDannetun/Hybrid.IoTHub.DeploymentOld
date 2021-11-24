@@ -96,8 +96,8 @@ stages:
                          environmentType=$(EnvironmentType) \
                          aksDeployment=$(AksDeployment) \
                          iotDeployment=$(IotDeployment) \
-                         aksClientId=$(AksClientId) \
-                         aksClientSecret=$(AksClientSecret) \
+                         //aksClientId=$(AksClientId) \
+                         //aksClientSecret=$(AksClientSecret) \
                          fileShareType=$(FileShareType) \
                          dpsDeployment=$(DpsDeployment) || exit 1
 
