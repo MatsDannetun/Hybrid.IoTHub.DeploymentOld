@@ -99,7 +99,7 @@ resource aks 'Microsoft.ContainerService/managedClusters@2021-05-01' = {
     //servicePrincipalProfile:{
       //clientId: aksClientId
       //secret: aksClientSecret
-    }
+    //}
     linuxProfile: {
       adminUsername: linuxAdminUsername
       ssh: {

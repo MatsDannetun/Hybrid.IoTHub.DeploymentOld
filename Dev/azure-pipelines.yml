@@ -54,14 +54,7 @@ variables:
   ShareName: 'iactestshare'
   DotNetVersion: '6.0.x'
   Location: ${{ parameters.Location }}
-  ${{ if eq( variables['Build.Reason'], 'Schedule' ) }}: 
-    ResourceGroupName: e2etest-nightly
-  ${{ if ne( variables['Build.Reason'], 'Schedule' ) }}: 
-    ResourceGroupName: ${{ parameters.ResourceGroupName }}
-  ${{ if eq( variables['Build.Reason'], 'Schedule' ) }}: 
-    DeleteResourceGroup: true
-  ${{ if ne( variables['Build.Reason'], 'Schedule' ) }}: 
-    DeleteResourceGroup: ${{ parameters.DeleteResourceGroup }}
+
   
 stages:
 - stage: 'Infra'
