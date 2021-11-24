@@ -91,13 +91,11 @@ stages:
           az deployment sub create \
             --name $(Build.BuildNumber) \
             --location $(Location) \
-            --template-file ./main.bicep \
+            --template-file ./Dev/main.bicep \
             --parameters resourceGroupName=$(ResourceGroupName) \
                          environmentType=$(EnvironmentType) \
                          aksDeployment=$(AksDeployment) \
                          iotDeployment=$(IotDeployment) \
-                         //aksClientId=$(AksClientId) \
-                         //aksClientSecret=$(AksClientSecret) \
                          fileShareType=$(FileShareType) \
                          dpsDeployment=$(DpsDeployment) || exit 1
 
