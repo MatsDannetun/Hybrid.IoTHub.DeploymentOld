@@ -91,7 +91,7 @@ stages:
           az deployment sub create \
             --name $(Build.BuildNumber) \
             --location $(Location) \
-            --template-file main.bicep \
+            --template-file ./main.bicep \
             --parameters resourceGroupName=$(ResourceGroupName) \
                          environmentType=$(EnvironmentType) \
                          aksDeployment=$(AksDeployment) \
